@@ -1,14 +1,41 @@
 using Microsoft.EntityFrameworkCore;
 using MyApi.Data;
+using Npgsql;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Use DATABASE_URL from Railway
-var conn = Environment.GetEnvironmentVariable("DATABASE_URL") 
-           ?? builder.Configuration.GetConnectionString("Default");
+// Get connection string from environment variable
+var databaseUrl = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+if (string.IsNullOrEmpty(databaseUrl))
+{
+    throw new InvalidOperationException("DATABASE_URL environment variable is not set.");
+}
+
+// Railway provides a URL, we need to parse it
+var databaseUri = new Uri(databaseUrl);
+
+// Extract user info
+var userInfo = databaseUri.UserInfo.Split(':');
+var username = userInfo[0];
+var password = userInfo[1];
+
+// Build a proper Npgsql connection string
+var connBuilder = new NpgsqlConnectionStringBuilder
+{
+    Host = databaseUri.Host,
+    Port = databaseUri.Port,
+    Username = username,
+    Password = password,
+    Database = databaseUri.AbsolutePath.TrimStart('/'),
+    SslMode = SslMode.Require,
+    TrustServerCertificate = true
+};
+
+var connectionString = connBuilder.ToString();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(conn));
+    options.UseNpgsql(connectionString));
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
